@@ -108,7 +108,7 @@ You must handle these cases and talk about them in your video:
 
 ## Run it
 
-This is a pnpm workspace. Install once at the root.
+This is a pnpm workspace. Install once at the root. Use Node.js 22 or newer (Wrangler requires it).
 
 ```bash
 pnpm install
@@ -155,3 +155,11 @@ You must understand every line you submit. We check this with your video and in 
 5. Paste the repository link and the video link in the application form.
 
 We will run `pnpm install && pnpm check && pnpm typecheck && pnpm test` on your repository.
+
+## Decisions
+
+1. **Split strategy.** I split with integer division and hand the remaining cents to members in the order they joined the home. This keeps the shares adding up to exactly `totalCents` with no floating point maths, and it matches the example (`1000 / 3` → `334, 333, 333`). Zero-cent shares are allowed when there are more members than cents.
+2. **Idempotent, race-safe payments.** Each share stores `paid_at` and the key that paid it. The pay endpoint is a single conditional `UPDATE ... WHERE paid_at IS NULL`, so two simultaneous requests cannot both succeed. A replay with the same key returns the stored result; a different key gets `409`. I added a unique index on the key and a `CHECK` that keeps `paid_at` and the key either both set or both empty.
+3. **Strict edges, forgiving UI.** The API validates every input at the boundary (positive safe integers, non-empty names, JSON bodies), returns `{ "error": "..." }` for every failure, and keeps money in integer cents. The React page wraps every request in a timeout, renders loading, empty and error states, and keeps a share unpaid with an inline message when a payment fails. If a payment loses a race (`409`), it reloads so the UI shows the real state instead of guessing.
+
+I added two read-only endpoints for the web page, which the assignment did not specify: `GET /api/homes/:homeId` (home and members) and `GET /api/homes/:homeId/bills` (bills with their shares). The required write endpoints are unchanged.
